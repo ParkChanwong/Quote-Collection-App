@@ -9,7 +9,8 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import EyeIcon from '../asset/icons/EyeIcon';
+import EyeIcon from '../asset/icons/eye.svg';
+import EyeOffIcon from '../asset/icons/eye-off.svg';
 
 export type InputTextProps = TextInputProps & {
   label: string;
@@ -74,7 +75,23 @@ export default function InputText({
             onPress={() => setVisible(value => !value)}
             style={styles.visibilityButton}
           >
-            <EyeIcon crossed={visible} />
+            <>
+              {visible ? (
+                <EyeOffIcon
+                  width={20}
+                  height={20}
+                  color="#64765E"
+                  accessible={false}
+                />
+              ) : (
+                <EyeIcon
+                  width={20}
+                  height={20}
+                  color="#64765E"
+                  accessible={false}
+                />
+              )}
+            </>
           </Pressable>
         )}
       </View>
