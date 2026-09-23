@@ -15,7 +15,7 @@ import InputText from '../components/InputText';
 import PrimaryButton from '../components/PrimaryButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function LoginScreen() {
+export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
   const insets = useSafeAreaInsets();
   const login = useSignIn();
   const submitting = useRef(false);
@@ -50,6 +50,7 @@ export default function LoginScreen() {
       await login.mutateAsync({ userId: username.trim(), userPw: password });
       setPassword('');
       setMessage('로그인되었습니다.');
+      onSuccess?.();
     } catch (error) {
       if (isAxiosError(error)) {
         const serverMessage = error.response?.data?.message;
