@@ -1,32 +1,46 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { Text } from 'react-native';
 import type { Quote } from '../api/quotes';
 import { styles } from './collection.styles';
-import { QuoteCard, EmptyState } from '../components/CollectionContent';
+import {
+  QuoteCard,
+  EmptyState,
+  QueryStatus,
+} from '../components/CollectionContent';
 type Props = {
+  query: UseQueryResult<Quote[], Error>;
   saved: Quote[];
+  bookmarkOverrides: Quote[];
+  pendingBookmarkIds?: number[];
   onToggleSave: (quote: Quote) => void;
   explore: () => void;
 };
 export default function SavedQuotesScreen({
+  query,
   saved,
+  bookmarkOverrides,
+  pendingBookmarkIds,
   onToggleSave,
   explore,
 }: Props) {
+  const unavailable = query.isPending || (query.isError && !query.data);
   return (
     <>
       <Text style={styles.eyebrow}>MY LITTLE COLLECTION</Text>
       <Text style={styles.heading}>내 마음에 남은 문장</Text>
       <Text style={styles.description}>다시 읽고 싶은 말들을 한곳에.</Text>
-      <Text style={styles.storageNote}>
-        담은 문장은 현재 앱 실행 중에만 유지돼요.
-      </Text>
-      <Text style={styles.resultCount}>모아둔 문장 {saved.length}</Text>
-      {saved.length ? (
+      {!unavailable && (
+        <Text style={styles.resultCount}>모아둔 문장 {saved.length}</Text>
+      )}
+      {unavailable ? (
+        <QueryStatus query={query} />
+      ) : saved.length ? (
         saved.map(quote => (
           <QuoteCard
             key={quote.id}
             quote={quote}
-            saved={saved}
+            bookmarkOverrides={bookmarkOverrides}
+            pendingBookmarkIds={pendingBookmarkIds}
             onToggleSave={onToggleSave}
           />
         ))
