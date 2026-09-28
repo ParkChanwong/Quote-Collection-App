@@ -12,6 +12,8 @@ type Props = {
   query: UseQueryResult<Quote[], Error>;
   themes: string[];
   saved: Quote[];
+  bookmarkOverrides: Quote[];
+  pendingBookmarkIds?: number[];
   onToggleSave: (quote: Quote) => void;
   explore: (theme?: string) => void;
   onOpenSaved: () => void;
@@ -20,6 +22,8 @@ export default function HomeScreen({
   query,
   themes,
   saved,
+  bookmarkOverrides,
+  pendingBookmarkIds,
   onToggleSave,
   explore,
   onOpenSaved,
@@ -61,7 +65,8 @@ export default function HomeScreen({
             </Text>
             <SaveButton
               quote={featured}
-              saved={saved}
+              bookmarkOverrides={bookmarkOverrides}
+              pendingBookmarkIds={pendingBookmarkIds}
               onToggleSave={onToggleSave}
             />
           </View>
@@ -123,7 +128,8 @@ export default function HomeScreen({
               <QuoteCard
                 key={quote.id}
                 quote={quote}
-                saved={saved}
+                bookmarkOverrides={bookmarkOverrides}
+                pendingBookmarkIds={pendingBookmarkIds}
                 onToggleSave={onToggleSave}
               />
             ))
