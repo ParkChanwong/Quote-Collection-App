@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,11 +8,11 @@ import {
   View,
   FlatList,
 } from 'react-native';
+import useRequestLock from '../hooks/useRequestLock';
 import { getQuotePage, type Quote } from '../api/quotes';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { styles } from './collection.styles';
 import { TextInput } from 'react-native';
-import type { UseQueryResult } from '@tanstack/react-query';
 import SearchIcon from '../asset/icons/search.svg';
 import CloseIcon from '../asset/icons/close.svg';
 import {
@@ -20,9 +21,9 @@ import {
   QueryStatus,
 } from '../components/CollectionContent';
 type Props = {
-  query: UseQueryResult<Quote[], Error>;
   themes: string[];
-  saved: Quote[];
+  bookmarkOverrides: Quote[];
+  pendingBookmarkIds?: number[];
   onToggleSave: (quote: Quote) => void;
   keyword: string;
   setKeyword: (value: string) => void;
@@ -30,26 +31,46 @@ type Props = {
   setTheme: (value: string) => void;
 };
 export default function ExploreScreen({
-  query,
   themes,
-  saved,
+  bookmarkOverrides,
+  pendingBookmarkIds,
   onToggleSave,
   keyword,
   setKeyword,
   theme,
   setTheme,
 }: Props) {
-  const filtering = theme !== '전체' || !!keyword.trim();
+  const request = useRequestLock();
+  const filterLocked = useRef(false);
+  useEffect(() => {
+    filterLocked.current = false;
+  }, [theme, keyword]);
+  const searchTheme = theme === '전체' ? '' : theme;
+  const searchKeyword = keyword.trim();
   const pages = useInfiniteQuery({
-    queryKey: ['quotes', 'pages'],
-    queryFn: ({ pageParam, signal }) => getQuotePage(pageParam, signal),
+    queryKey: ['quotes', 'search', searchTheme, searchKeyword],
+    queryFn: ({ pageParam, signal }) =>
+      getQuotePage(
+        { theme: searchTheme, keyword: searchKeyword, page: pageParam },
+        signal,
+      ),
     initialPageParam: 1,
     getNextPageParam: (lastPage, _pages, lastPageParam) =>
       lastPage.result.length && lastPageParam < lastPage.totalPage
         ? lastPageParam + 1
         : undefined,
-    enabled: !filtering,
   });
+  const busy = pages.isFetching || request.pending;
+  const refresh = () => {
+    if (!pages.isFetching) {
+      return request.run(() => pages.refetch({ cancelRefetch: false }));
+    }
+  };
+  const loadNext = () => {
+    if (!pages.isFetching && pages.hasNextPage) {
+      return request.run(() => pages.fetchNextPage({ cancelRefetch: false }));
+    }
+  };
   const loaded = Array.from(
     new Map(
       (pages.data?.pages.flatMap(page => page.result) ?? []).map(quote => [
@@ -58,19 +79,10 @@ export default function ExploreScreen({
       ]),
     ).values(),
   );
-  const filtered = (query.data ?? []).filter(
-    item =>
-      (theme === '전체' || item.themeName === theme) &&
-      `${item.quote} ${item.personName}`
-        .toLowerCase()
-        .includes(keyword.trim().toLowerCase()),
-  );
-  const activeQuery = filtering ? query : pages;
-  const visibleQuotes = filtering ? filtered : loaded;
-  const total = filtering ? filtered.length : pages.data?.pages[0]?.total ?? 0;
+  const total = pages.data?.pages[0]?.total ?? 0;
   const status =
-    activeQuery.isPending || (activeQuery.isError && !activeQuery.data) ? (
-      <QueryStatus query={activeQuery} />
+    pages.isPending || (pages.isError && !pages.data) ? (
+      <QueryStatus query={pages} />
     ) : null;
   return (
     <View style={exploreStyles.screen}>
@@ -99,7 +111,15 @@ export default function ExploreScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="검색어 지우기"
-              onPress={() => setKeyword('')}
+              disabled={busy}
+              accessibilityState={{ disabled: busy, busy }}
+              onPress={() => {
+                if (busy || filterLocked.current) {
+                  return;
+                }
+                filterLocked.current = true;
+                setKeyword('');
+              }}
               style={styles.iconButton}
             >
               <CloseIcon
@@ -120,9 +140,20 @@ export default function ExploreScreen({
           {themes.map(item => (
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ selected: item === theme }}
+              disabled={busy}
+              accessibilityState={{
+                selected: item === theme,
+                disabled: busy,
+                busy,
+              }}
               key={item}
-              onPress={() => setTheme(item)}
+              onPress={() => {
+                if (busy || filterLocked.current || item === theme) {
+                  return;
+                }
+                filterLocked.current = true;
+                setTheme(item);
+              }}
               style={[styles.chip, item === theme && styles.activeChip]}
             >
               <Text
@@ -146,43 +177,45 @@ export default function ExploreScreen({
         key={`${theme}:${keyword}`}
         style={exploreStyles.list}
         contentContainerStyle={exploreStyles.listContent}
-        data={status ? [] : visibleQuotes}
+        data={status ? [] : loaded}
         keyExtractor={quote => String(quote.id)}
         renderItem={({ item }) => (
-          <QuoteCard quote={item} saved={saved} onToggleSave={onToggleSave} />
+          <QuoteCard
+            quote={item}
+            bookmarkOverrides={bookmarkOverrides}
+            pendingBookmarkIds={pendingBookmarkIds}
+            onToggleSave={onToggleSave}
+          />
         )}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        refreshing={activeQuery.isRefetching && !pages.isFetchingNextPage}
-        onRefresh={() => {
-          activeQuery.refetch();
-        }}
+        refreshing={pages.isRefetching && !pages.isFetchingNextPage}
+        onRefresh={refresh}
         onEndReached={() => {
           if (
-            !filtering &&
             pages.hasNextPage &&
             !pages.isFetching &&
             !pages.isFetchNextPageError
           ) {
-            pages.fetchNextPage();
+            return loadNext();
           }
         }}
         onEndReachedThreshold={0.4}
         ListFooterComponent={
-          !filtering ? (
-            pages.isFetchingNextPage ? (
-              <ActivityIndicator style={exploreStyles.footer} color="#284D40" />
-            ) : pages.isFetchNextPageError ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => pages.fetchNextPage()}
-                style={exploreStyles.footer}
-              >
-                <Text style={styles.emptyDescription}>
-                  다음 문장을 불러오지 못했어요. 다시 시도
-                </Text>
-              </Pressable>
-            ) : undefined
+          pages.isFetchingNextPage ? (
+            <ActivityIndicator style={exploreStyles.footer} color="#284D40" />
+          ) : pages.isFetchNextPageError ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              accessibilityState={{ disabled: busy, busy }}
+              onPress={loadNext}
+              style={exploreStyles.footer}
+            >
+              <Text style={styles.emptyDescription}>
+                다음 문장을 불러오지 못했어요. 다시 시도
+              </Text>
+            </Pressable>
           ) : undefined
         }
         ListEmptyComponent={
