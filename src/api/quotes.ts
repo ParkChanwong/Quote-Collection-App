@@ -5,10 +5,14 @@ export type Quote = {
   personName: string;
   themeName: string;
   quote: string;
+  bookmark: boolean;
 };
 
 export async function getQuotes(signal?: AbortSignal): Promise<Quote[]> {
-  const { data } = await api.get<{ result: Quote[] }>('/quote', { signal });
+  const { data } = await api.get<{ result: Quote[] }>('/quote/search', {
+    params: { theme: '', keyword: '', page: 1 },
+    signal,
+  });
   if (!Array.isArray(data.result)) {
     throw new Error('문장을 불러오지 못했습니다.');
   }
@@ -21,12 +25,18 @@ export type QuotePage = {
   totalPage: number;
 };
 
+export type QuoteSearchParams = {
+  theme?: string;
+  keyword?: string;
+  page: number;
+};
+
 export async function getQuotePage(
-  page: number,
+  { theme = '', keyword = '', page }: QuoteSearchParams,
   signal?: AbortSignal,
 ): Promise<QuotePage> {
-  const { data } = await api.get<QuotePage>('/quote', {
-    params: { page },
+  const { data } = await api.get<QuotePage>('/quote/search', {
+    params: { theme, keyword, page },
     signal,
   });
   if (
