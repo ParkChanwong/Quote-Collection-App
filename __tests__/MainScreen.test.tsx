@@ -43,6 +43,14 @@ jest.mock('@tanstack/react-query', () => {
       data:
         queryKey[0] === 'bookmarks'
           ? mockBookmarks
+          : queryKey[1] === 'daily'
+          ? {
+              id: 50,
+              quote: '서버가 고른 오늘의 명언',
+              personName: '오늘의 인물',
+              themeName: '삶',
+              bookmark: false,
+            }
           : [
               {
                 id: 1,
