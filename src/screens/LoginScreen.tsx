@@ -3,6 +3,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { isAxiosError } from 'axios';
+import { signUp } from '../api/account';
 import useSignIn from '../hooks/useSignIn';
 import InputText from '../components/InputText';
 import PrimaryButton from '../components/PrimaryButton';
@@ -18,13 +20,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
   const insets = useSafeAreaInsets();
   const login = useSignIn();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [signingUp, setSigningUp] = useState(false);
+  const busy = login.isPending || signingUp;
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const confirmationRef = useRef<ComponentRef<typeof TextInput>>(null);
   const submitting = useRef(false);
   const passwordRef = useRef<ComponentRef<typeof TextInput>>(null);
   const usernameRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
-  const [invalid, setInvalid] = useState<'username' | 'password' | null>(null);
+  const [invalid, setInvalid] = useState<
+    'username' | 'password' | 'confirmation' | null
+  >(null);
 
   const submit = async () => {
     if (submitting.current) {
@@ -42,11 +51,33 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
       passwordRef.current?.focus();
       return;
     }
+    if (
+      isSignUp &&
+      (!passwordConfirmation || password !== passwordConfirmation)
+    ) {
+      setInvalid('confirmation');
+      setMessage(
+        passwordConfirmation
+          ? '비밀번호가 일치하지 않습니다.'
+          : '비밀번호를 한 번 더 입력해 주세요.',
+      );
+      confirmationRef.current?.focus();
+      return;
+    }
     setInvalid(null);
     setMessage('');
     submitting.current = true;
     Keyboard.dismiss();
     try {
+      if (isSignUp) {
+        setSigningUp(true);
+        await signUp({ userId: username.trim(), userPw: password });
+        setPassword('');
+        setPasswordConfirmation('');
+        setIsSignUp(false);
+        setMessage('회원가입이 완료되었습니다. 로그인해 주세요.');
+        return;
+      }
       await login.mutateAsync({ userId: username.trim(), userPw: password });
       setPassword('');
       setMessage('로그인되었습니다.');
@@ -58,18 +89,23 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
           typeof serverMessage === 'string' && serverMessage.trim()
             ? serverMessage
             : error.response
-            ? '로그인에 실패했습니다. 아이디와 비밀번호를 확인해 주세요.'
+            ? isSignUp
+              ? '회원가입에 실패했습니다. 입력 내용을 확인해 주세요.'
+              : '로그인에 실패했습니다. 아이디와 비밀번호를 확인해 주세요.'
             : '서버에 연결할 수 없습니다. 네트워크를 확인하고 다시 시도해 주세요.',
         );
       } else {
         setMessage(
           error instanceof Error
             ? error.message
+            : isSignUp
+            ? '회원가입에 실패했습니다. 다시 시도해 주세요.'
             : '로그인에 실패했습니다. 다시 시도해 주세요.',
         );
       }
     } finally {
       submitting.current = false;
+      setSigningUp(false);
       login.reset();
     }
   };
@@ -87,7 +123,10 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 22 },
+          {
+            paddingTop: insets.top + (isSignUp ? 16 : 24),
+            paddingBottom: insets.bottom + (isSignUp ? 12 : 22),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -102,23 +141,27 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
           </View>
         </View>
 
-        <View style={styles.main}>
-          <View style={styles.intro}>
-            <Text style={styles.eyebrow}>WELCOME BACK</Text>
+        <View style={[styles.main, isSignUp && styles.signUpMain]}>
+          <View style={[styles.intro, isSignUp && styles.signUpIntro]}>
+            <Text style={styles.eyebrow}>
+              {isSignUp ? 'JOIN US' : 'WELCOME BACK'}
+            </Text>
             <Text accessibilityRole="header" style={styles.title}>
-              만나서 반가워요
+              {isSignUp ? '나만의 문장을 모아보세요' : '만나서 반가워요'}
             </Text>
-            <Text style={styles.description}>
-              마음에 닿은 문장을 모으는 시간.{'\n'}나만의 명언 컬렉션을
-              이어가세요.
-            </Text>
+            {!isSignUp && (
+              <Text style={styles.description}>
+                마음에 닿은 문장을 모으는 시간.{'\n'}나만의 명언 컬렉션을
+                이어가세요.
+              </Text>
+            )}
           </View>
 
           <InputText
             ref={usernameRef}
-            editable={!login.isPending}
+            editable={!busy}
             label="아이디"
-            containerStyle={styles.field}
+            containerStyle={[styles.field, isSignUp && styles.signUpField]}
             invalid={invalid === 'username'}
             placeholder="아이디를 입력해 주세요"
             value={username}
@@ -136,9 +179,9 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
           />
           <InputText
             ref={passwordRef}
-            editable={!login.isPending}
+            editable={!busy}
             label="비밀번호"
-            containerStyle={styles.field}
+            containerStyle={[styles.field, isSignUp && styles.signUpField]}
             invalid={invalid === 'password'}
             placeholder="비밀번호를 입력해 주세요"
             value={password}
@@ -149,18 +192,84 @@ export default function LoginScreen({ onSuccess }: { onSuccess?: () => void }) {
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
-            autoComplete="current-password"
-            textContentType="password"
-            returnKeyType="go"
-            onSubmitEditing={submit}
+            autoComplete={isSignUp ? 'new-password' : 'current-password'}
+            textContentType={isSignUp ? 'newPassword' : 'password'}
+            returnKeyType={isSignUp ? 'next' : 'go'}
+            onSubmitEditing={
+              isSignUp ? () => confirmationRef.current?.focus() : submit
+            }
           />
+          {isSignUp && (
+            <InputText
+              key="password-confirmation"
+              ref={confirmationRef}
+              editable={!busy}
+              label="비밀번호 확인"
+              containerStyle={[styles.field, isSignUp && styles.signUpField]}
+              invalid={invalid === 'confirmation'}
+              placeholder="비밀번호를 한 번 더 입력해 주세요"
+              value={passwordConfirmation}
+              onChangeText={value => {
+                setPasswordConfirmation(value);
+                clearMessage();
+              }}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="go"
+              onSubmitEditing={submit}
+            />
+          )}
           <PrimaryButton
-            title={login.isPending ? '로그인 중…' : '로그인'}
-            disabled={login.isPending}
-            accessibilityState={{ busy: login.isPending }}
+            title={
+              isSignUp
+                ? busy
+                  ? '가입 중…'
+                  : '회원가입'
+                : busy
+                ? '로그인 중…'
+                : '로그인'
+            }
+            disabled={busy}
+            accessibilityState={{ busy }}
             onPress={submit}
             style={styles.submit}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              isSignUp ? '로그인 화면으로 이동' : '회원가입 화면으로 이동'
+            }
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => {
+              if (submitting.current) {
+                return;
+              }
+              setIsSignUp(value => !value);
+              setPassword('');
+              setPasswordConfirmation('');
+              clearMessage();
+            }}
+            style={({ pressed }) => [
+              styles.switchButton,
+              isSignUp && styles.signUpSwitchButton,
+              (pressed || busy) && styles.switchDimmed,
+            ]}
+          >
+            <View style={styles.switchRow}>
+              <Text style={styles.switchText}>
+                {isSignUp ? '이미 계정이 있나요?' : '계정이 없나요?'}
+              </Text>
+              <View style={styles.switchLinkContainer}>
+                <Text style={styles.switchLink}>
+                  {isSignUp ? '로그인' : '회원가입'}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
           {!!message && (
             <Text
               accessibilityRole="alert"
@@ -226,7 +335,11 @@ const styles = StyleSheet.create({
     paddingTop: 54,
     paddingBottom: 42,
   },
+  signUpMain: { paddingTop: 28, paddingBottom: 20 },
   intro: { marginBottom: 34 },
+  signUpIntro: { marginBottom: 22 },
+  signUpField: { marginBottom: 14 },
+  signUpSwitchButton: { marginTop: 4 },
   eyebrow: {
     color: '#748274',
     fontSize: 10,
@@ -249,6 +362,24 @@ const styles = StyleSheet.create({
   },
   field: { marginBottom: 22 },
   submit: { marginTop: 5 },
+  switchButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  switchRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  switchText: { fontSize: 13, color: '#767E6E' },
+  switchLinkContainer: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#284D40',
+  },
+  switchLink: {
+    fontSize: 13,
+    color: '#284D40',
+    fontWeight: '700',
+  },
+  switchDimmed: { opacity: 0.55 },
   message: { marginTop: 12, fontSize: 12, lineHeight: 20, color: '#8C6744' },
   footer: { alignItems: 'center', gap: 10 },
   footerRule: {

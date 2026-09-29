@@ -18,3 +18,20 @@ export async function signIn(credentials: SignInRequest): Promise<string> {
   }
   return data.result;
 }
+
+export type SignUpRequest = { userId: string; userPw: string };
+
+export async function signUp(credentials: SignUpRequest): Promise<void> {
+  const { data } = await api.post<{ statusCode?: number; message?: string }>(
+    '/account/signup/user',
+    { userId: credentials.userId, userPw: credentials.userPw },
+  );
+  if (
+    data?.statusCode !== undefined &&
+    (data.statusCode < 200 || data.statusCode >= 300)
+  ) {
+    throw new Error(
+      data.message || '회원가입에 실패했습니다. 다시 시도해 주세요.',
+    );
+  }
+}
