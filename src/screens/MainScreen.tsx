@@ -4,7 +4,7 @@ import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppHeader from '../components/AppHeader';
 import BottomTab, { type BottomTabName } from '../components/BottomTab';
-import { getQuotes, type Quote } from '../api/quotes';
+import { getQuotes, getDailyQuote, type Quote } from '../api/quotes';
 import { saveBookmark, deleteBookmark, getBookmarks } from '../api/bookmarks';
 
 import useRequestLock from '../hooks/useRequestLock';
@@ -27,6 +27,10 @@ export default function MainScreen() {
     queryKey: ['quotes'],
     queryFn: ({ signal }) => getQuotes(signal),
   });
+  const dailyQuery = useQuery({
+    queryKey: ['quotes', 'daily'],
+    queryFn: ({ signal }) => getDailyQuote(signal),
+  });
   const quotes = query.data ?? [];
   const themes = [
     '전체',
@@ -37,7 +41,7 @@ export default function MainScreen() {
     queryFn: ({ signal }) => getBookmarks(signal),
   });
   const saved = bookmarksQuery.data ?? [];
-  const activeQuery = tab === '내 문장' ? bookmarksQuery : query;
+  const activeQuery = tab === '내 문장' ? bookmarksQuery : dailyQuery;
   const toggleSave = async (quote: Quote) => {
     if (pendingBookmarks.current.has(quote.id)) {
       return;
@@ -109,7 +113,13 @@ export default function MainScreen() {
               onRefresh={() => {
                 if (!activeQuery.isFetching) {
                   return refreshRequest.run(() =>
-                    activeQuery.refetch({ cancelRefetch: false }),
+                    tab === '홈'
+                      ? Promise.all([
+                          dailyQuery.refetch({ cancelRefetch: false }),
+                          query.refetch({ cancelRefetch: false }),
+                          bookmarksQuery.refetch({ cancelRefetch: false }),
+                        ])
+                      : bookmarksQuery.refetch({ cancelRefetch: false }),
                   );
                 }
               }}
@@ -119,7 +129,7 @@ export default function MainScreen() {
         >
           {tab === '홈' ? (
             <HomeScreen
-              query={query}
+              query={dailyQuery}
               themes={themes}
               saved={saved}
               bookmarkOverrides={bookmarkOverrides}

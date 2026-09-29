@@ -9,7 +9,7 @@ import {
   QueryStatus,
 } from '../components/CollectionContent';
 type Props = {
-  query: UseQueryResult<Quote[], Error>;
+  query: UseQueryResult<Quote | null, Error>;
   themes: string[];
   saved: Quote[];
   bookmarkOverrides: Quote[];
@@ -28,12 +28,8 @@ export default function HomeScreen({
   explore,
   onOpenSaved,
 }: Props) {
-  const quotes = query.data ?? [];
   const today = new Date();
-  const dayIndex = Math.floor(
-    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000,
-  );
-  const featured = quotes.length ? quotes[dayIndex % quotes.length] : undefined;
+  const featured = query.data;
   const status =
     query.isPending || query.isError ? <QueryStatus query={query} /> : null;
   return (

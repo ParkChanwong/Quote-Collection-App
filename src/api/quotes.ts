@@ -50,3 +50,26 @@ export async function getQuotePage(
   }
   return data;
 }
+
+export async function getDailyQuote(
+  signal?: AbortSignal,
+): Promise<Quote | null> {
+  const { data } = await api.get<{ result: Quote | null }>('/quote/daily', {
+    signal,
+  });
+  const quote = data.result;
+  if (quote === null) {
+    return null;
+  }
+  if (
+    !quote ||
+    !Number.isInteger(quote.id) ||
+    typeof quote.quote !== 'string' ||
+    typeof quote.personName !== 'string' ||
+    typeof quote.themeName !== 'string' ||
+    typeof quote.bookmark !== 'boolean'
+  ) {
+    throw new Error('오늘의 명언을 불러오지 못했습니다.');
+  }
+  return quote;
+}
